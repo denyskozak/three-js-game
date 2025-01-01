@@ -8,6 +8,7 @@ import {Octree} from 'three/addons/math/Octree.js';
 import {OctreeHelper} from 'three/addons/helpers/OctreeHelper.js';
 import {Capsule} from 'three/addons/math/Capsule.js';
 import {GUI} from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import {Interface} from "./layer/Interface";
 
 let currentAnimation = '';
 
@@ -25,74 +26,18 @@ export function Game() {
         let hp = 100, mana = 100
         let actions = [];
         let settings;
+        let leftMouseButtonClicked = false;
 
+        const hpBar = document.getElementById('hpBar');
+        const manaBar = document.getElementById('manaBar');
 
-        // HP
-        const hpBarContainer = document.createElement('div');
-        hpBarContainer.style.position = 'absolute';
-        hpBarContainer.style.width = '150px';
-        hpBarContainer.style.height = '20px';
-        hpBarContainer.style.backgroundColor = 'red';
-        hpBarContainer.style.border = '2px solid black';
-        hpBarContainer.style.borderRadius = '15px';
-        hpBarContainer.style.overflow = 'hidden';
-        hpBarContainer.style.top = '100px';
-        hpBarContainer.style.left = '20px';
-        hpBarContainer.style.visibility = 'hidden';
-
-        // hpBarContainer.style.pointerEvents = 'none'; // Make it non-interactive
-        // hpBarContainer.style.visibility = 'hidden'; // Initially hidden
-        containerRef.current.appendChild(hpBarContainer);
-
-        const hpBar = document.createElement('div');
-        hpBar.style.width = '100%';
-        hpBar.style.height = '100%';
-        hpBar.style.backgroundColor = 'lime';
-        hpBarContainer.appendChild(hpBar);
-
-        // MANA
-        const manaBarContainer = document.createElement('div');
-        manaBarContainer.style.position = 'absolute';
-        manaBarContainer.style.width = '150px';
-        manaBarContainer.style.height = '20px';
-        manaBarContainer.style.border = '2px solid black';
-        manaBarContainer.style.borderRadius = '15px';
-        manaBarContainer.style.overflow = 'hidden';
-        manaBarContainer.style.top = '130px';
-        manaBarContainer.style.left = '20px';
-        manaBarContainer.style.visibility = 'hidden';
-
-        // manaBarContainer.style.pointerEvents = 'none'; // Make it non-interactive
-        // manaBarContainer.style.visibility = 'hidden'; // Initially hidden
-        containerRef.current.appendChild(manaBarContainer);
-
-        const manaBar = document.createElement('div');
-        manaBar.style.width = '100%';
-        manaBar.style.height = '100%';
-        manaBar.style.backgroundColor = 'blue';
-        manaBarContainer.appendChild(manaBar);
-
-        // Function to update HP bar position and health
+        // Function to update the HP bar width
         function updateHPBar() {
-            if (!model || !hpBarContainer) return;
-
-            // hpBarContainer.style.left = `${screenPosition.x - 0}px`; // Center the bar
-            // hpBarContainer.style.top = `${screenPosition.y - 200}px`; // Position slightly above the model
-            hpBarContainer.style.visibility = 'visible'; // Ensure the bar is visible
-
-            // Update health bar width based on player's health
             hpBar.style.width = `${hp}%`;
         }
 
-        // Function to update HP bar position and health
+        // Function to update the Mana bar width
         function updateManaBar() {
-            if (!model || !manaBarContainer) return;
-
-            // hpBarContainer.style.left = `${screenPosition.x - 0}px`; // Center the bar
-            // hpBarContainer.style.top = `${screenPosition.y - 200}px`; // Position slightly above the model
-            manaBarContainer.style.visibility = 'visible'; // Ensure the bar is visible
-
-            // Update health bar width based on player's health
             manaBar.style.width = `${mana}%`;
         }
 
@@ -257,12 +202,19 @@ export function Game() {
             switch(event.code) {
                 case 'KeyE':
                     throwBall();
+                    break;
+                case 'KeyG':
+                    leftMouseButtonClicked = true;
             }
         });
 
         document.addEventListener('keyup', (event) => {
 
             keyStates[event.code] = false;
+            switch(event.code) {
+                case 'KeyG':
+                    leftMouseButtonClicked = false;
+            }
         });
 
         containerRef.current.addEventListener('mousedown', (event) => {
@@ -336,7 +288,6 @@ export function Game() {
                 fireball: {
                     position: { x: fireball.position.x, y: fireball.position.y, z: fireball.position.z },
                     velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
-                    ownerId: '2' // Unique ID for the client
                 }
             }));
 
@@ -734,6 +685,9 @@ export function Game() {
                 const cameraDirection = new THREE.Vector3();
                 camera.getWorldDirection(cameraDirection);
 
+                console.log('leftMouseButtonClicked ', leftMouseButtonClicked)
+                if (leftMouseButtonClicked) return;
+
                 // Calculate the direction the player is moving (opposite to camera's forward)
                 const targetRotationY = Math.atan2(cameraDirection.x, cameraDirection.z);
 
@@ -871,6 +825,9 @@ export function Game() {
     }, []);
 
     return (
-        <div id="game-container" ref={containerRef}></div>
+        <div id="game-container" ref={containerRef}>
+            <Interface />
+
+        </div>
     );
 }

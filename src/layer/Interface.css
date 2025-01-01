@@ -1,0 +1,43 @@
+/* General styles for containers */
+.interface-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+.bar-container {
+    position: relative;
+    width: 150px;
+    height: 20px;
+    border: 2px solid black;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+/* Specific styles for HP bar */
+.hp-bar-container {
+    top: 100px;
+    left: 20px;
+    background-color: red;
+}
+
+/* Specific styles for Mana bar */
+.mana-bar-container {
+    top: 100px;
+    left: 20px;
+    background-color: gray;
+}
+
+/* General styles for the fill elements */
+.bar-fill {
+    height: 100%;
+}
+
+/* Specific styles for HP fill */
+.hp-bar-fill {
+    background-color: lime;
+}
+
+/* Specific styles for Mana fill */
+.mana-bar-fill {
+    background-color: blue;
+}

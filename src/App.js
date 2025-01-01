@@ -6,6 +6,7 @@ import { getFullnodeUrl } from '@mysten/sui/client';
 import '@mysten/dapp-kit/dist/index.css';
 import {useState} from "react";
 import {Game} from "./Game";
+import {Interface} from "./layer/Interface";
 
 const {networkConfig} = createNetworkConfig({
     devnet: {url: getFullnodeUrl('devnet')},
