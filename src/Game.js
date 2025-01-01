@@ -15,7 +15,7 @@ export function Game() {
     const containerRef = useRef(null);
 
     useLayoutEffect(() => {
-        const socket = new WebSocket('ws://localhost:8080');
+        const socket = new WebSocket('ws://35.160.49.180:8080');
 
         // Store other players
         const players = {};
@@ -273,10 +273,9 @@ export function Game() {
         document.body.addEventListener('mousemove', (event) => {
             if (document.pointerLockElement === document.body) {
                 yaw -= event.movementX / 500;
-                pitch -= event.movementY / 500;
 
                 // Constrain the pitch angle to prevent flipping
-                pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+                pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch - (event.movementY / 500)));
             }
         });
 
@@ -751,11 +750,15 @@ export function Game() {
             const position = {
                 x: playerCollider.start.x,
                 y: playerCollider.start.y,
-                z: playerCollider.start.z
+                z: playerCollider.start.z,
             };
 
+            const rotation = {
+                    y: model?.rotation?.y || 0 // Send only the Y-axis rotation
+                };
+
             if (isSocketOpen()) {
-                socket.send(JSON.stringify({type: 'updatePosition', position}));
+                socket.send(JSON.stringify({type: 'updatePosition', position, rotation}));
             }
         }
 
@@ -794,15 +797,19 @@ export function Game() {
             if (model) {
                 const player = SkeletonUtils.clone(model)
                 player.position.set(0, 1, 0);
+                player.rotation.set(0, 0, 0);
                 scene.add(player);
                 players[id] = player;
             }
         }
 
         // Function to update a player's position
-        function updatePlayerPosition(id, position) {
+        function updatePlayerPosition(id, position, rotation) {
             if (players[id]) {
                 players[id].position.set(position.x, position.y, position.z);
+                players[id].rotation.y = rotation?.y;
+                console.log('12 ', rotation?.y)
+
             } else {
                 createPlayer(id);
             }
@@ -847,7 +854,7 @@ export function Game() {
                     createPlayer(message.fromId);
                     break;
                 case 'updatePosition':
-                    updatePlayerPosition(message.fromId, message.position);
+                    updatePlayerPosition(message.fromId, message.position, message.rotation);
                     break;
                 case 'removePlayer':
                     removePlayer(message.id);
