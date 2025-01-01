@@ -1,27 +1,111 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, {useState, useLayoutEffect, useRef} from 'react';
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 import Stats from 'three/addons/libs/stats.module.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Octree } from 'three/addons/math/Octree.js';
-import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
-import { Capsule } from 'three/addons/math/Capsule.js';
-import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {Octree} from 'three/addons/math/Octree.js';
+import {OctreeHelper} from 'three/addons/helpers/OctreeHelper.js';
+import {Capsule} from 'three/addons/math/Capsule.js';
+import {GUI} from 'three/examples/jsm/libs/lil-gui.module.min.js';
+
+let currentAnimation = '';
 
 export function Game() {
     const containerRef = useRef(null);
 
     useLayoutEffect(() => {
         const socket = new WebSocket('ws://localhost:8080');
-        const isSocketOpen = () => socket.readyState === WebSocket.OPEN;
+
         // Store other players
         const players = {};
 
         // Character Model and Animation Variables
-        let model, mixer, idleAction, walkAction, runAction;
+        let model, mixer, idleAction, walkAction, runAction, camera;
+        let hp = 100, mana = 100
         let actions = [];
         let settings;
+
+
+        // HP
+        const hpBarContainer = document.createElement('div');
+        hpBarContainer.style.position = 'absolute';
+        hpBarContainer.style.width = '150px';
+        hpBarContainer.style.height = '20px';
+        hpBarContainer.style.backgroundColor = 'red';
+        hpBarContainer.style.border = '2px solid black';
+        hpBarContainer.style.borderRadius = '15px';
+        hpBarContainer.style.overflow = 'hidden';
+        hpBarContainer.style.top = '100px';
+        hpBarContainer.style.left = '20px';
+        hpBarContainer.style.visibility = 'hidden';
+
+        // hpBarContainer.style.pointerEvents = 'none'; // Make it non-interactive
+        // hpBarContainer.style.visibility = 'hidden'; // Initially hidden
+        containerRef.current.appendChild(hpBarContainer);
+
+        const hpBar = document.createElement('div');
+        hpBar.style.width = '100%';
+        hpBar.style.height = '100%';
+        hpBar.style.backgroundColor = 'lime';
+        hpBarContainer.appendChild(hpBar);
+
+        // MANA
+        const manaBarContainer = document.createElement('div');
+        manaBarContainer.style.position = 'absolute';
+        manaBarContainer.style.width = '150px';
+        manaBarContainer.style.height = '20px';
+        manaBarContainer.style.backgroundColor = 'red';
+        manaBarContainer.style.border = '2px solid black';
+        manaBarContainer.style.borderRadius = '15px';
+        manaBarContainer.style.overflow = 'hidden';
+        manaBarContainer.style.top = '130px';
+        manaBarContainer.style.left = '20px';
+        manaBarContainer.style.visibility = 'hidden';
+
+        // manaBarContainer.style.pointerEvents = 'none'; // Make it non-interactive
+        // manaBarContainer.style.visibility = 'hidden'; // Initially hidden
+        containerRef.current.appendChild(manaBarContainer);
+
+        const manaBar = document.createElement('div');
+        manaBar.style.width = '100%';
+        manaBar.style.height = '100%';
+        manaBar.style.backgroundColor = 'blue';
+        manaBarContainer.appendChild(manaBar);
+
+
+        // Function to update HP bar position and health
+        function updateHPBar() {
+            if (!model || !hpBarContainer) return;
+
+            // hpBarContainer.style.left = `${screenPosition.x - 0}px`; // Center the bar
+            // hpBarContainer.style.top = `${screenPosition.y - 200}px`; // Position slightly above the model
+            hpBarContainer.style.visibility = 'visible'; // Ensure the bar is visible
+
+            // Update health bar width based on player's health
+            hpBar.style.width = `${hp}%`;
+        }
+        // Function to update HP bar position and health
+        function updateManaBar() {
+            if (!model || !manaBarContainer) return;
+
+            // hpBarContainer.style.left = `${screenPosition.x - 0}px`; // Center the bar
+            // hpBarContainer.style.top = `${screenPosition.y - 200}px`; // Position slightly above the model
+            manaBarContainer.style.visibility = 'visible'; // Ensure the bar is visible
+
+            // Update health bar width based on player's health
+            manaBar.style.width = `${mana}%`;
+        }
+        // Function to handle damage and update health
+        function takeDamage(amount) {
+            hp = Math.max(0, hp - amount); // Ensure health doesn't go below 0
+        }
+
+
+        const isSocketOpen = () => socket.readyState === WebSocket.OPEN;
+        let fireballModel; // Store the fireball model for reuse
+
+        let cursor; // Global variable for the cursor object
 
         const clock = new THREE.Clock();
 
@@ -29,7 +113,7 @@ export function Game() {
         scene.background = new THREE.Color(0x88ccee);
         scene.fog = new THREE.Fog(0x88ccee, 0, 50);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
 
         const fillLight1 = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 1.5);
@@ -96,7 +180,7 @@ export function Game() {
 
         const worldOctree = new Octree();
 
-        const playerCollider = new Capsule(new THREE.Vector3(0, 0.35, 0), new THREE.Vector3(0, 1, 0), 0.35);
+        const playerCollider = new Capsule(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0), 0.35);
 
         const playerVelocity = new THREE.Vector3();
         const playerDirection = new THREE.Vector3();
@@ -128,6 +212,16 @@ export function Game() {
         let yaw = 0;
         let pitch = 0;
 
+        // const mouse = new THREE.Vector2(); // Normalized device coordinates
+        // const raycaster = new THREE.Raycaster(); // To project cursor onto the scene
+
+        // function createCursor() {
+        //     const cursorGeometry = new THREE.SphereGeometry(0.05, 16, 16); // Small sphere
+        //     const cursorMaterial = new THREE.MeshBasicMaterial({color: 0xff0000}); // Red color
+        //     cursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        //     scene.add(cursor);
+        // }
+
         // Function to update the camera position and rotation
         function updateCameraPosition() {
             const playerPosition = new THREE.Vector3();
@@ -152,7 +246,7 @@ export function Game() {
 
         // Event listener for mouse wheel scroll (for zooming in and out)
         window.addEventListener('wheel', (event) => {
-            const delta = -event.deltaY * 0.05; // Sensitivity adjustment
+            const delta = event.deltaY * 0.05; // Sensitivity adjustment
             adjustFOV(delta);
         });
 
@@ -185,6 +279,30 @@ export function Game() {
             }
         });
 
+        // const renderCursor = () => {
+        //     if (!model) return;
+        //     raycaster.setFromCamera(mouse, camera);
+        //
+        //     const intersects = raycaster.intersectObjects(scene.children, true); // Intersect with all scene objects
+        //     console.log('model ', model)
+        //     if (intersects.length > 0) {
+        //         const intersectionPoint = intersects[0].point; // Get the first intersection point
+        //         cursor.position.copy(intersectionPoint); // Move the cursor to the intersection point
+        //     }
+        // }
+
+        // Cursor
+        // document.addEventListener('pointermove', (event) => {
+        //     // Convert mouse position to normalized device coordinates (-1 to +1)
+        //     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        //     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        //     mouse.z = 1;
+        //     console.log('mouse.x ', mouse.x)
+        //     console.log(' mouse.y ',  mouse.y)
+        //     // Use the raycaster to find where the mouse intersects the scene
+        //     renderCursor();
+        // });
+
         window.addEventListener('resize', onWindowResize);
 
         function onWindowResize() {
@@ -195,25 +313,38 @@ export function Game() {
             renderer.setSize(window.innerWidth, window.innerHeight);
 
         }
-
+        const CAST_MANA_PRICE = 10;
         function throwBall() {
+            if (!fireballModel || mana < CAST_MANA_PRICE) return; // Ensure the fireball model is loaded
 
-            const sphere = spheres[sphereIdx];
+            const fireball = SkeletonUtils.clone(fireballModel); // Clone the fireball model for reuse
+            scene.add(fireball); // Add the fireball to the scene
 
+            // Set the initial position of the fireball
             camera.getWorldDirection(playerDirection);
+            fireball.position.copy(playerCollider.end).addScaledVector(playerDirection, playerCollider.radius * 1.5);
 
-            sphere.collider.center.copy(playerCollider.end).addScaledVector(playerDirection, playerCollider.radius * 1.5);
-
-            // throw the ball with more force if we hold the button longer, and if we move forward
-
+            // Set the velocity for the fireball
             const impulse = 15 + 30 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
+            const velocity = playerDirection.clone().multiplyScalar(impulse);
 
-            sphere.velocity.copy(playerDirection).multiplyScalar(impulse);
-            sphere.velocity.addScaledVector(playerVelocity, 2);
+            // Store velocity and collider information for the fireball
+            spheres[sphereIdx] = {
+                mesh: fireball,
+                collider: new THREE.Sphere(new THREE.Vector3().copy(fireball.position), SPHERE_RADIUS),
+                velocity: velocity,
+            };
+
+            // Set a timeout to remove the fireball after 2 seconds
+            setTimeout(() => {
+                scene.remove(fireball); // Remove the fireball from the scene
+                spheres.splice(sphereIdx, 1); // Remove it from the array (optional)
+            }, 1000);
 
             sphereIdx = (sphereIdx + 1) % spheres.length;
-
+            mana = mana - CAST_MANA_PRICE;
         }
+
 
         function playerCollisions() {
 
@@ -261,8 +392,6 @@ export function Game() {
 
             playerCollisions();
             // camera.position.copy(playerCollider.end);
-            updateCameraPosition(); // Keep camera position updated
-
         }
 
         function playerSphereCollision(sphere) {
@@ -335,39 +464,26 @@ export function Game() {
         }
 
         function updateSpheres(deltaTime) {
-
             spheres.forEach(sphere => {
+                if (!sphere.mesh) return;
 
                 sphere.collider.center.addScaledVector(sphere.velocity, deltaTime);
 
                 const result = worldOctree.sphereIntersect(sphere.collider);
-
                 if (result) {
-
+                    // Handle collision logic (e.g., explode fireball or bounce)
                     sphere.velocity.addScaledVector(result.normal, -result.normal.dot(sphere.velocity) * 1.5);
                     sphere.collider.center.add(result.normal.multiplyScalar(result.depth));
-
                 } else {
-
+                    // Apply gravity to fireball
                     sphere.velocity.y -= GRAVITY * deltaTime;
-
                 }
 
-                const damping = Math.exp(-1.5 * deltaTime) - 1;
-                sphere.velocity.addScaledVector(sphere.velocity, damping);
-
-                playerSphereCollision(sphere);
-
+                // Update the fireball position
+                sphere.mesh.position.copy(sphere.collider.center);
             });
 
-            spheresCollisions();
-
-            for (const sphere of spheres) {
-
-                sphere.mesh.position.copy(sphere.collider.center);
-
-            }
-
+            spheresCollisions(); // Handle collisions between spheres
         }
 
         function getForwardVector() {
@@ -393,23 +509,11 @@ export function Game() {
 
         function controls(deltaTime) {
 
-            // gives a bit of air control
+
+            // Forward and backward movement for W and S
             const speedDelta = deltaTime * (playerOnFloor ? 25 : 8);
 
-            if (keyStates['KeyW']) {
-
-                playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
-                setAnimation('Run');
-
-            }
-
-            if (keyStates['KeyS']) {
-
-                playerVelocity.add(getForwardVector().multiplyScalar(-speedDelta));
-                setAnimation('Idle');
-
-            }
-
+            // Rotate playerVelocity when pressing A or D
             if (keyStates['KeyA']) {
 
                 playerVelocity.add(getSideVector().multiplyScalar(-speedDelta));
@@ -424,16 +528,30 @@ export function Game() {
 
             }
 
-            if (playerOnFloor) {
-
-                if (keyStates['Space']) {
-
-                    playerVelocity.y = 15;
-
-                }
-
+            if (keyStates['KeyW']) {
+                const forwardVector = new THREE.Vector3(
+                    Math.sin(model.rotation.y),
+                    0,
+                    Math.cos(model.rotation.y)
+                );
+                playerVelocity.add(forwardVector.multiplyScalar(speedDelta));
+                setAnimation('Run');
             }
 
+            if (keyStates['KeyS']) {
+                const backwardVector = new THREE.Vector3(
+                    -Math.sin(model.rotation.y),
+                    0,
+                    -Math.cos(model.rotation.y)
+                );
+                playerVelocity.add(backwardVector.multiplyScalar(speedDelta));
+                setAnimation('Idle');
+            }
+
+            // Space for jumping
+            if (playerOnFloor && keyStates['Space']) {
+                playerVelocity.y = 15;
+            }
         }
 
         // Play or pause animations
@@ -466,19 +584,21 @@ export function Game() {
             action.reset();
             action.play();
             action.fadeIn(duration);
+            currentAnimation = '';
         }
 
         // Set animation based on action name
         function setAnimation(actionName) {
+            // TODO return animation
             // switch (actionName) {
             //     case 'Idle':
             //         fadeToAction(idleAction, 0.5);
             //         break;
             //     case 'Walk':
-            //         fadeToAction(walkAction, 0.5);
+            //         fadeToAction(walkAction, 0.1);
             //         break;
             //     case 'Run':
-            //         fadeToAction(runAction, 0.5);
+            //         fadeToAction(runAction, 0.05);
             //         break;
             // }
         }
@@ -486,7 +606,16 @@ export function Game() {
         const loader = new GLTFLoader().setPath('./models/');
 
 
-        loader.load('collision-world.glb', (gltf) => {
+        loader.load('murloc_creature.glb', (gltf) => {
+            const modelMurloc = gltf.scene;
+            modelMurloc.scale.set(0.2, 0.2, 0.2);
+
+            scene.add(modelMurloc);
+
+            worldOctree.fromGraphNode(gltf.scene);
+        });
+
+        loader.load('valley_of_trials_-_world_of_warcraft_-_test_1.glb', (gltf) => {
 
             scene.add(gltf.scene);
 
@@ -522,18 +651,23 @@ export function Game() {
                 });
 
         });
-        loader.load('mutant.glb', function (gltf) {
+
+        loader.load('fireball.glb', (gltf) => {
+            fireballModel = gltf.scene;
+            fireballModel.scale.set(0.03, 0.03, 0.03); // Adjust size if needed
+        });
+
+        loader.load('judgement_armor.glb', function (gltf) {
             model = gltf.scene;
             model.traverse((object) => {
                 if (object.isMesh) object.castShadow = true;
             });
             model.scale.set(0.4, 0.4, 0.4);
-            scene.add(model);
 
+            scene.add(model);
 
             mixer = new THREE.AnimationMixer(model);
             const animations = gltf.animations;
-            console.log('animations: ', animations);
             idleAction = mixer.clipAction(animations[0]);
             walkAction = mixer.clipAction(animations[3]);
             runAction = mixer.clipAction(animations[1]);
@@ -559,26 +693,32 @@ export function Game() {
 
         function teleportPlayerIfOob() {
             if (camera.position.y <= -25) {
-
                 playerCollider.start.set(0, 0.35, 0);
                 playerCollider.end.set(0, 1, 0);
                 playerCollider.radius = 0.35;
                 camera.position.copy(playerCollider.end);
                 camera.rotation.set(0, 0, 0);
-
             }
         }
 
         function updateModel() {
             if (model) {
-                // Set model position to the player's collider position (end point)
-                model.position.copy(playerCollider.end);
-                // Update model's rotation to align with the camera's rotation
-                model.rotation.y = camera.rotation.y;
-                // Additional alignment adjustments (if needed)
-                model.position.y -= playerCollider.radius + 0.5; // Adjust height if needed
-                // model.rotation.x = ...; // Set X rotation if needed
-                // model.rotation.z = ...; // Set Z rotation if needed
+                const playerPosition = new THREE.Vector3();
+                playerCollider.getCenter(playerPosition);
+
+                // Update model position and height
+                model.position.copy(playerPosition);
+                // model.position.y += 0.5; // Adjust the height to keep the model slightly above ground
+                model.position.y -= 0.5;
+                // Get the camera's forward direction
+                const cameraDirection = new THREE.Vector3();
+                camera.getWorldDirection(cameraDirection);
+
+                // Calculate the direction the player is moving (opposite to camera's forward)
+                const targetRotationY = Math.atan2(cameraDirection.x, cameraDirection.z);
+
+                // Rotate the model to face the opposite direction
+                model.rotation.y = THREE.MathUtils.lerp(model.rotation.y, targetRotationY, 0.1);
             }
         }
 
@@ -611,13 +751,14 @@ export function Game() {
                 controls(deltaTime);
 
                 updatePlayer(deltaTime);
-
                 updateSpheres(deltaTime);
 
                 teleportPlayerIfOob();
                 updateModel();
-
-
+                // renderCursor();
+                updateCameraPosition();
+                updateHPBar();
+                updateManaBar();
             }
 
             sendPositionUpdate();
@@ -642,7 +783,6 @@ export function Game() {
             if (players[id]) {
                 players[id].position.set(position.x, position.y, position.z);
             } else {
-                console.log('createPlayer: ');
                 createPlayer(id);
             }
         }
@@ -675,6 +815,6 @@ export function Game() {
     }, []);
 
     return (
-        <div ref={containerRef}></div>
+        <div id="game-container" ref={containerRef}></div>
     );
 }

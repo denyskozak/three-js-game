@@ -13,14 +13,14 @@ const {networkConfig} = createNetworkConfig({
 const queryClient = new QueryClient()
 
 export function App() {
-    const [activeCharacter, setActiveCharacter] = useState(null);
+    const [activeCharacter, setActiveCharacter] = useState(true);
     return (
         <QueryClientProvider client={queryClient}>
             <SuiClientProvider networks={networkConfig} defaultNetwork="devnet">
                 <WalletProvider>
-                    <AuthLayout>
-                        {activeCharacter ? <Game />: <CharacterManager onCharacterSelect={setActiveCharacter}/>}
-                    </AuthLayout>
+                    {/*<AuthLayout>*/}
+                        <Game />
+                    {/*</AuthLayout>*/}
                 </WalletProvider>
             </SuiClientProvider>
         </QueryClientProvider>
