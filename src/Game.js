@@ -55,7 +55,6 @@ export function Game() {
         manaBarContainer.style.position = 'absolute';
         manaBarContainer.style.width = '150px';
         manaBarContainer.style.height = '20px';
-        manaBarContainer.style.backgroundColor = 'red';
         manaBarContainer.style.border = '2px solid black';
         manaBarContainer.style.borderRadius = '15px';
         manaBarContainer.style.overflow = 'hidden';
@@ -73,7 +72,6 @@ export function Game() {
         manaBar.style.backgroundColor = 'blue';
         manaBarContainer.appendChild(manaBar);
 
-
         // Function to update HP bar position and health
         function updateHPBar() {
             if (!model || !hpBarContainer) return;
@@ -85,6 +83,7 @@ export function Game() {
             // Update health bar width based on player's health
             hpBar.style.width = `${hp}%`;
         }
+
         // Function to update HP bar position and health
         function updateManaBar() {
             if (!model || !manaBarContainer) return;
@@ -96,6 +95,7 @@ export function Game() {
             // Update health bar width based on player's health
             manaBar.style.width = `${mana}%`;
         }
+
         // Function to handle damage and update health
         function takeDamage(amount) {
             hp = Math.max(0, hp - amount); // Ensure health doesn't go below 0
@@ -253,6 +253,11 @@ export function Game() {
         document.addEventListener('keydown', (event) => {
 
             keyStates[event.code] = true;
+
+            switch(event.code) {
+                case 'KeyE':
+                    throwBall();
+            }
         });
 
         document.addEventListener('keyup', (event) => {
@@ -263,10 +268,6 @@ export function Game() {
         containerRef.current.addEventListener('mousedown', (event) => {
             document.body.requestPointerLock();
             mouseTime = performance.now();
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (document.pointerLockElement !== null) throwBall();
         });
 
         document.body.addEventListener('mousemove', (event) => {
@@ -313,7 +314,9 @@ export function Game() {
             renderer.setSize(window.innerWidth, window.innerHeight);
 
         }
-        const CAST_MANA_PRICE = 10;
+
+        const CAST_MANA_PRICE = 20;
+
         function throwBall() {
             if (!fireballModel || mana < CAST_MANA_PRICE) return; // Ensure the fireball model is loaded
 
@@ -327,6 +330,16 @@ export function Game() {
             // Set the velocity for the fireball
             const impulse = 15 + 30 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
             const velocity = playerDirection.clone().multiplyScalar(impulse);
+
+            // Send the fireball data to the server
+            socket.send(JSON.stringify({
+                type: 'throwFireball',
+                fireball: {
+                    position: { x: fireball.position.x, y: fireball.position.y, z: fireball.position.z },
+                    velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+                    ownerId: '2' // Unique ID for the client
+                }
+            }));
 
             // Store velocity and collider information for the fireball
             spheres[sphereIdx] = {
@@ -405,6 +418,7 @@ export function Game() {
 
             // approximation: player = 3 spheres
 
+            let touchedPlayer = false;
             for (const point of [playerCollider.start, playerCollider.end, center]) {
 
                 const d2 = point.distanceToSquared(sphere_center);
@@ -420,10 +434,13 @@ export function Game() {
 
                     const d = (r - Math.sqrt(d2)) / 2;
                     sphere_center.addScaledVector(normal, -d);
-
+                    touchedPlayer = true;
+                    break;
                 }
 
             }
+
+            if (touchedPlayer) { takeDamage(10)}
 
         }
 
@@ -480,10 +497,16 @@ export function Game() {
                 }
 
                 // Update the fireball position
-                sphere.mesh.position.copy(sphere.collider.center);
+
+                playerSphereCollision(sphere);
+
             });
 
             spheresCollisions(); // Handle collisions between spheres
+
+            for (let sphere of spheres) {
+                sphere.mesh.position.copy(sphere.collider.center);
+            }
         }
 
         function getForwardVector() {
@@ -522,10 +545,8 @@ export function Game() {
             }
 
             if (keyStates['KeyD']) {
-
                 playerVelocity.add(getSideVector().multiplyScalar(speedDelta));
                 setAnimation('Walk');
-
             }
 
             if (keyStates['KeyW']) {
@@ -666,11 +687,11 @@ export function Game() {
 
             scene.add(model);
 
-            mixer = new THREE.AnimationMixer(model);
-            const animations = gltf.animations;
-            idleAction = mixer.clipAction(animations[0]);
-            walkAction = mixer.clipAction(animations[3]);
-            runAction = mixer.clipAction(animations[1]);
+            // mixer = new THREE.AnimationMixer(model);
+            // const animations = gltf.animations;
+            // idleAction = mixer.clipAction(animations[0]);
+            // walkAction = mixer.clipAction(animations[3]);
+            // runAction = mixer.clipAction(animations[1]);
 
             // actions = [idleAction, walkAction, runAction];
             // settings = {
@@ -757,10 +778,10 @@ export function Game() {
                 updateModel();
                 // renderCursor();
                 updateCameraPosition();
-                updateHPBar();
-                updateManaBar();
-            }
 
+            }
+            updateHPBar();
+            updateManaBar();
             sendPositionUpdate();
 
             renderer.render(scene, camera);
@@ -795,12 +816,33 @@ export function Game() {
             }
         }
 
+        function addFireballToScene(fireballData) {
+            const fireball = SkeletonUtils.clone(fireballModel); // Clone the model
+            fireball.position.set(fireballData.position.x, fireballData.position.y, fireballData.position.z);
+
+            scene.add(fireball);
+
+            spheres.push({
+                mesh: fireball,
+                collider: new THREE.Sphere(new THREE.Vector3().copy(fireball.position), SPHERE_RADIUS),
+                velocity: new THREE.Vector3(
+                    fireballData.velocity.x,
+                    fireballData.velocity.y,
+                    fireballData.velocity.z
+                ),
+                ownerId: fireballData.ownerId
+            });
+        }
 
         // Handle incoming messages from the server
         socket.onmessage = async (event) => {
             let message = JSON.parse(event.data);
 
+
             switch (message.type) {
+                case 'newFireball':
+                    addFireballToScene(message.fireball);
+                    break;
                 case 'newPlayer':
                     createPlayer(message.fromId);
                     break;
@@ -812,6 +854,13 @@ export function Game() {
                     break;
             }
         };
+
+        const manaInterval =
+            setInterval(() => mana = mana < 100 ? mana + 10 : mana, 2000);
+
+        return () => {
+            clearInterval(manaInterval)
+        }
     }, []);
 
     return (
